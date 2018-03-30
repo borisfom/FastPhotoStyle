@@ -60,7 +60,7 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
     if save_intermediate:
         with Timer("Elapsed time in stylization: %f"):
             stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
-        utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=2)
+        utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=0)
 
         with Timer("Elapsed time in propagation: %f"):
             out_img = smoothing_module.process(output_image_path, content_image_path)

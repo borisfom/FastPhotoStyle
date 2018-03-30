@@ -18,8 +18,19 @@ class Propagator(nn.Module):
     self.beta = beta
 
   def process(self, initImg, contentImg):
-    content = scipy.misc.imread(contentImg, mode='RGB')
-    B = scipy.misc.imread(initImg, mode='RGB').astype(np.float64)/255
+
+    if type(contentImg) == str:
+      content = scipy.misc.imread(contentImg, mode='RGB')
+    else:
+      content = contentImg.copy()
+    # content = scipy.misc.imread(contentImg, mode='RGB')
+
+    if type(initImg) == str:
+      B = scipy.misc.imread(initImg, mode='RGB').astype(np.float64) / 255
+    else:
+      B = scipy.asarray(initImg).astype(np.float64) / 255
+      # B = self.
+    # B = scipy.misc.imread(initImg, mode='RGB').astype(np.float64)/255
     h1,w1,k = B.shape
     h = h1 - 4
     w = w1 - 4

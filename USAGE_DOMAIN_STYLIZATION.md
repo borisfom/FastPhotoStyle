@@ -11,7 +11,7 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 ### Setup
 In addition to the step in [USAGE.md](USAGE.md), you need to install anaconda opencv3
 - `conda install -c menpo opencv3`
-
+- `pip install opencv-contrib-python`
 
 ### Perform Domain Stylization
 
