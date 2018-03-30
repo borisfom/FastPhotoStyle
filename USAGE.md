@@ -1,5 +1,6 @@
 [![License CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC4.0-blue.svg)](https://raw.githubusercontent.com/NVIDIA/FastPhotoStyle/master/LICENSE.md)
 ![Python 2.7](https://img.shields.io/badge/python-2.7-green.svg)
+![Python 3.5](https://img.shields.io/badge/python-3.5-green.svg)
 
 ## CODE USAGE
 
@@ -13,7 +14,7 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 We only tested our code in the following environment. 
 - OS: Ubuntu 16.04
 - CUDA: 9.1
-- **Python 2 from Anaconda2**
+- **Python 2 or 3 from Anaconda**
 - pytorch 0.3.0
 - Setup environment variables. You might already have them set up properly.
   - export ANACONDA=PATH-TO-YOUR-ANACONDA-LIBRARY
