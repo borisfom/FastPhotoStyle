@@ -374,14 +374,22 @@ def smooth_local_affine(output_cpu, input_cpu, epsilon, patch, h, w, f_r, f_e):
   return numpy_filtered_best_output
 
 
-def smooth_filter(init_img_name, content_img_name, f_radius=15,f_edge=1e-1):
-  best_image_bgr = np.array(Image.open(init_img_name).convert("RGB"), dtype=np.float32)
+def smooth_filter(initImg, contentImg, f_radius=15,f_edge=1e-1):
+  '''
+  :param initImg: intermediate output. Either image path or PIL Image
+  :param contentImg: content image output. Either path or PIL Image
+  :return: stylized output image. PIL Image
+  '''
+  if type(initImg) == str:
+    initImg = Image.open(initImg).convert("RGB")
+  best_image_bgr = np.array(initImg, dtype=np.float32)
   bW, bH, bC = best_image_bgr.shape
   best_image_bgr = best_image_bgr[:, :, ::-1]
   best_image_bgr = best_image_bgr.transpose((2, 0, 1))
 
-  content_input = Image.open(content_img_name).convert("RGB")
-  content_input = content_input.resize((bH,bW))
+  if type(contentImg) == str:
+    contentImg = Image.open(contentImg).convert("RGB")
+  content_input = contentImg.resize((bH,bW))
   content_input = np.array(content_input, dtype=np.float32)
   content_input = content_input[:, :, ::-1]
   content_input = content_input.transpose((2, 0, 1))

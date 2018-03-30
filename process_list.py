@@ -5,6 +5,7 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 
 from __future__ import print_function
 import argparse
+import random
 import os
 import torch
 from photo_wct import PhotoWCT
@@ -18,17 +19,21 @@ parser.add_argument('--model', default='./PhotoWCTModels/photo_wct.pth',
 parser.add_argument('--cuda', type=bool, default=True, help='Enable CUDA.')
 parser.add_argument('--save_intermediate', action='store_true', default=False)
 parser.add_argument('--fast', action='store_true', default=False)
-parser.add_argument('--folder', type=str, default='examples')
+parser.add_argument('--outp_img_folder', type=str, default='examples_stan/results')
+parser.add_argument('--cont_img_folder', type=str, default='examples_stan/content_img')
+parser.add_argument('--cont_seg_folder', type=str, default='examples_stan/content_seg')
+parser.add_argument('--cont_list', type=str, default='examples_stan/list_content.txt')
+parser.add_argument('--styl_img_folder', type=str, default='examples_stan/style_img')
+parser.add_argument('--styl_seg_folder', type=str, default='examples_stan/style_seg')
+parser.add_argument('--styl_list', type=str, default='examples_stan/list_style.txt')
 args = parser.parse_args()
 
-folder = args.folder
-cont_img_folder = os.path.join(folder, 'content_img')
-cont_seg_folder = os.path.join(folder, 'content_seg')
-styl_img_folder = os.path.join(folder, 'style_img')
-styl_seg_folder = os.path.join(folder, 'style_seg')
-outp_img_folder = os.path.join(folder, 'results')
-cont_img_list = [f for f in os.listdir(cont_img_folder) if os.path.isfile(os.path.join(cont_img_folder, f))]
-cont_img_list.sort()
+
+with open(args.cont_list) as f:
+    content_list = f.readlines()
+
+with open(args.styl_list) as f:
+    style_list = f.readlines()
 
 # Load model
 p_wct = PhotoWCT()
@@ -39,15 +44,21 @@ if args.fast==True:
 else:
     p_pro = Propagator()
 
-for f in cont_img_list:
+
+for f in content_list:
     print("Process " + f)
-    
-    content_image_path = os.path.join(cont_img_folder, f)
-    content_seg_path = os.path.join(cont_seg_folder, f).replace(".png", ".pgm")
-    style_image_path = os.path.join(styl_img_folder, f)
-    style_seg_path = os.path.join(styl_seg_folder, f).replace(".png", ".pgm")
-    output_image_path = os.path.join(outp_img_folder, f)
-    
+    f = f.strip()
+    random.shuffle(style_list)
+    style_f = style_list[0].strip()
+    content_image_path = os.path.join(args.cont_img_folder, f)
+    content_seg_path = os.path.join(args.cont_seg_folder, f).replace(".png", ".pgm")
+    style_image_path = os.path.join(args.styl_img_folder, style_f)
+    style_seg_path = os.path.join(args.styl_seg_folder, style_f).replace(".png", ".pgm")
+    output_image_path = os.path.join(args.outp_img_folder, f)
+    directory = os.path.dirname(output_image_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     process_stylization.stylization(
         stylization_module=p_wct,
         smoothing_module=p_pro,
