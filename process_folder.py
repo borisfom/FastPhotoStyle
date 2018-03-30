@@ -6,19 +6,21 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 from __future__ import print_function
 import argparse
 import os
-
 import torch
-
 from photo_wct import PhotoWCT
+from photo_smooth import Propagator
+from photo_gif import GIFSmoothing
 import process_stylization
 
 parser = argparse.ArgumentParser(description='Photorealistic Image Stylization')
 parser.add_argument('--model', default='./PhotoWCTModels/photo_wct.pth',
                     help='Path to the PhotoWCT model. These are provided by the PhotoWCT submodule, please use `git submodule update --init --recursive` to pull.')
 parser.add_argument('--cuda', type=bool, default=True, help='Enable CUDA.')
+parser.add_argument('--fast', action='store_true', default=False)
+parser.add_argument('--folder', type=str, default='examples')
 args = parser.parse_args()
 
-folder = 'examples'
+folder = args.folder
 cont_img_folder = os.path.join(folder, 'content_img')
 cont_seg_folder = os.path.join(folder, 'content_seg')
 styl_img_folder = os.path.join(folder, 'style_img')
@@ -30,6 +32,11 @@ cont_img_list.sort()
 # Load model
 p_wct = PhotoWCT()
 p_wct.load_state_dict(torch.load(args.model))
+# Load Propagator
+if args.fast==True:
+    p_pro = GIFSmoothing(r=35, eps=0.3)
+else:
+    p_pro = Propagator()
 
 for f in cont_img_list:
     print("Process " + f)
@@ -41,7 +48,8 @@ for f in cont_img_list:
     output_image_path = os.path.join(outp_img_folder, f)
     
     process_stylization.stylization(
-        p_wct=p_wct,
+        stylization_module=p_wct,
+        smoothing_module=p_pro,
         content_image_path=content_image_path,
         style_image_path=style_image_path,
         content_seg_path=content_seg_path,

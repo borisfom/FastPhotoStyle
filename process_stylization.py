@@ -12,12 +12,7 @@ from PIL import Image
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 import torchvision.utils as utils
-
-from photo_smooth import Propagator
 from smooth_filter import smooth_filter
-
-# Load Propagator
-p_pro = Propagator()
 
 
 class Timer:
@@ -32,7 +27,7 @@ class Timer:
         print(self.msg % (time.time() - self.start_time))
 
 
-def stylization(p_wct, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
+def stylization(stylization_module, smoothing_module, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
                 cuda):
     # Load image
     cont_img = Image.open(content_image_path).convert('RGB')
@@ -50,7 +45,7 @@ def stylization(p_wct, content_image_path, style_image_path, content_seg_path, s
     if cuda:
         cont_img = cont_img.cuda(0)
         styl_img = styl_img.cuda(0)
-        p_wct.cuda(0)
+        stylization_module.cuda(0)
     
     cont_img = Variable(cont_img, volatile=True)
     styl_img = Variable(styl_img, volatile=True)
@@ -59,11 +54,11 @@ def stylization(p_wct, content_image_path, style_image_path, content_seg_path, s
     styl_seg = np.asarray(styl_seg)
     
     with Timer("Elapsed time in stylization: %f"):
-        stylized_img = p_wct.transform(cont_img, styl_img, cont_seg, styl_seg)
+        stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
     utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1)
     
     with Timer("Elapsed time in propagation: %f"):
-        out_img = p_pro.process(output_image_path, content_image_path)
+        out_img = smoothing_module.process(output_image_path, content_image_path)
     out_img.save(output_image_path)
     
     if not cuda:
