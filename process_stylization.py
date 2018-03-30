@@ -14,6 +14,7 @@ from PIL import Image
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 import torchvision.utils as utils
+import torch.nn as nn
 from smooth_filter import smooth_filter
 
 
@@ -59,7 +60,7 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
     if save_intermediate:
         with Timer("Elapsed time in stylization: %f"):
             stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
-        utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=0)
+        utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=2)
 
         with Timer("Elapsed time in propagation: %f"):
             out_img = smoothing_module.process(output_image_path, content_image_path)
@@ -75,7 +76,9 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
     else:
         with Timer("Elapsed time in stylization: %f"):
             stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
-        out_img = transforms.ToPILImage()(stylized_img[0,::].data.cpu().float())
+        grid = utils.make_grid(stylized_img.data, nrow=1, padding=0)
+        ndarr = grid.mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy()
+        out_img = Image.fromarray(ndarr)
 
         with Timer("Elapsed time in propagation: %f"):
             out_img = smoothing_module.process(out_img, cont_pilimg)
