@@ -18,7 +18,8 @@ parser.add_argument('--model', default='./PhotoWCTModels/photo_wct.pth',
 parser.add_argument('--cuda', type=bool, default=True, help='Enable CUDA.')
 parser.add_argument('--save_intermediate', action='store_true', default=False)
 parser.add_argument('--fast', action='store_true', default=False)
-parser.add_argument('--folder', type=str, default='examples')
+parser.add_argument('--no_post', action='store_true', default=False)
+parser.add_argument('--folder', type=str, default='examples_wad')
 args = parser.parse_args()
 
 folder = args.folder
@@ -57,5 +58,6 @@ for f in cont_img_list:
         style_seg_path=style_seg_path,
         output_image_path=output_image_path,
         cuda=args.cuda,
-        save_intermediate=args.save_intermediate
+        save_intermediate=args.save_intermediate,
+        no_post=args.no_post
     )

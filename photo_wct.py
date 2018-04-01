@@ -26,7 +26,7 @@ class PhotoWCT(nn.Module):
     
     def transform(self, cont_img, styl_img, cont_seg, styl_seg):
         self.__compute_label_info(cont_seg, styl_seg)
-        
+
         sF4, sF3, sF2, sF1 = self.e4.forward_multiple(styl_img)
         
         cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4(cont_img)
@@ -78,9 +78,14 @@ class PhotoWCT(nn.Module):
             target_feature = self.__wct_core(cont_feat_view, styl_feat_view)
         else:
             target_feature = cont_feat.view(cont_c, -1).clone()
-    
-            t_cont_seg = np.asarray(Image.fromarray(cont_seg, mode='RGB').resize((cont_w, cont_h), Image.NEAREST))
-            t_styl_seg = np.asarray(Image.fromarray(styl_seg, mode='RGB').resize((styl_w, styl_h), Image.NEAREST))
+            if len(cont_seg.shape) == 2:
+                t_cont_seg = np.asarray(Image.fromarray(cont_seg).resize((cont_w, cont_h), Image.NEAREST))
+            else:
+                t_cont_seg = np.asarray(Image.fromarray(cont_seg, mode='RGB').resize((cont_w, cont_h), Image.NEAREST))
+            if len(styl_seg.shape) == 2:
+                t_styl_seg = np.asarray(Image.fromarray(styl_seg).resize((styl_w, styl_h), Image.NEAREST))
+            else:
+                t_styl_seg = np.asarray(Image.fromarray(styl_seg, mode='RGB').resize((styl_w, styl_h), Image.NEAREST))
             
             for l in self.label_set:
                 if self.label_indicator[l] == 0:
