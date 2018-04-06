@@ -20,6 +20,8 @@ parser.add_argument('--save_intermediate', action='store_true', default=False)
 parser.add_argument('--fast', action='store_true', default=False)
 parser.add_argument('--no_post', action='store_true', default=False)
 parser.add_argument('--folder', type=str, default='examples_wad')
+parser.add_argument('--beta', type=float, default=0.9999)
+
 args = parser.parse_args()
 
 folder = args.folder
@@ -38,7 +40,7 @@ p_wct.load_state_dict(torch.load(args.model))
 if args.fast==True:
     p_pro = GIFSmoothing(r=35, eps=0.3)
 else:
-    p_pro = Propagator()
+    p_pro = Propagator(args.beta)
 
 for f in cont_img_list:
     print("Process " + f)

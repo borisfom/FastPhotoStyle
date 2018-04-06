@@ -33,9 +33,12 @@ def resize(img, max_small_len=840.0):
     ch = img.height
     cw = img.width
     cd = ch if ch < cw else cw
+    if cd <= max_small_len: # If no need for resizing, just return the current image dimensions.
+        return cw, ch
     cs = max_small_len / cd
     new_ch = int(cs * ch)
     new_cw = int(cs * cw)
+    print("Resize image: (%d,%d)->(%d,%d)" %(cw,ch,new_cw,new_ch))
     img.thumbnail((new_cw, new_ch), Image.BICUBIC)
     return new_cw, new_ch
 
@@ -76,6 +79,7 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         with Timer("Elapsed time in stylization: %f"):
             stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
         if ch != new_ch or cw != new_cw:
+            print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
             stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
         utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=0)
 
@@ -95,6 +99,7 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         with Timer("Elapsed time in stylization: %f"):
             stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
         if ch != new_ch or cw != new_cw:
+            print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
             stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
         grid = utils.make_grid(stylized_img.data, nrow=1, padding=0)
         ndarr = grid.mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy()
