@@ -41,7 +41,7 @@ p_wct = PhotoWCT()
 p_wct.load_state_dict(torch.load(args.model))
 # Load Propagator
 if args.fast==True:
-    p_pro = GIFSmoothing(r=35, eps=0.3)
+    p_pro = GIFSmoothing(r=35, eps=0.001)
 else:
     p_pro = Propagator()
 

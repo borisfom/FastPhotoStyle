@@ -35,7 +35,7 @@ except:
     exit()
 
 if args.fast==True:
-    p_pro = GIFSmoothing(r=35, eps=0.3)
+    p_pro = GIFSmoothing(r=35, eps=0.001)
 else:
     p_pro = Propagator()
 if args.cuda:

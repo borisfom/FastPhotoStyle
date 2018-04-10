@@ -64,7 +64,7 @@ class GIFSmoothing(nn.Module):
     init_img2 = init_img.cuda()
     cont_img = Variable(cont_img, volatile=True)
     init_img2 = Variable(init_img2, volatile=True)
-    output_img = GuidedFilter(r=35,eps=0.001)(cont_img,init_img2)
+    output_img = GuidedFilter(r=self.r,eps=self.eps)(cont_img,init_img2)
     output_img = torch.clamp(output_img,0,1)
     output_img = transforms.ToPILImage()(output_img[0,:,:,:].data.cpu())
     return output_img
