@@ -17,6 +17,15 @@ import torchvision.utils as utils
 import torch.nn as nn
 from smooth_filter import smooth_filter
 
+class ReMapping:
+    def __init__(self):
+        self.remapping = []
+
+    def process(self, seg):
+        new_seg = seg.copy()
+        for k, v in self.remapping.items():
+            new_seg[seg == k] = v
+        return new_seg
 
 class Timer:
     def __init__(self, msg):
@@ -29,38 +38,59 @@ class Timer:
     def __exit__(self, exc_type, exc_value, exc_tb):
         print(self.msg % (time.time() - self.start_time))
 
-def resize(img, max_small_len=840.0):
-    ch = img.height
-    cw = img.width
-    cd = ch if ch < cw else cw
-    if cd <= max_small_len: # If no need for resizing, just return the current image dimensions.
-        return cw, ch
-    cs = max_small_len / cd
-    new_ch = int(cs * ch)
-    new_cw = int(cs * cw)
-    print("Resize image: (%d,%d)->(%d,%d)" %(cw,ch,new_cw,new_ch))
-    img.thumbnail((new_cw, new_ch), Image.BICUBIC)
-    return new_cw, new_ch
+# def resize(img, max_small_len=840.0):
+#     ch = img.height
+#     cw = img.width
+#     cd = ch if ch < cw else cw
+#     if cd <= max_small_len: # If no need for resizing, just return the current image dimensions.
+#         return cw, ch
+#     cs = max_small_len / cd
+#     new_ch = int(cs * ch)
+#     new_cw = int(cs * cw)
+#     print("Resize image: (%d,%d)->(%d,%d)" %(cw,ch,new_cw,new_ch))
+#     img.thumbnail((new_cw, new_ch), Image.BICUBIC)
+#     return new_cw, new_ch
+
+def memory_limit_image_resize(cont_img):
+    # prevent too small or too big images
+    MINSIZE=256
+    MAXSIZE=960
+    orig_width = cont_img.width
+    orig_height = cont_img.height
+    if max(cont_img.width,cont_img.height) < MINSIZE:
+        if cont_img.width > cont_img.height:
+            cont_img.thumbnail((int(cont_img.width*1.0/cont_img.height*MINSIZE), MINSIZE), Image.BICUBIC)
+        else:
+            cont_img.thumbnail((MINSIZE, int(cont_img.height*1.0/cont_img.width*MINSIZE)), Image.BICUBIC)
+    if min(cont_img.width,cont_img.height) > MAXSIZE:
+        if cont_img.width > cont_img.height:
+            cont_img.thumbnail((MAXSIZE, int(cont_img.height*1.0/cont_img.width*MAXSIZE)), Image.BICUBIC)
+        else:
+            cont_img.thumbnail(((int(cont_img.width*1.0/cont_img.height*MAXSIZE), MAXSIZE)), Image.BICUBIC)
+    print("Resize image: (%d,%d)->(%d,%d)" % (orig_width, orig_height, cont_img.width, cont_img.height))
+    return cont_img.width, cont_img.height
 
 def stylization(stylization_module, smoothing_module, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
-                cuda, save_intermediate, no_post):
+                cuda, save_intermediate, no_post, cont_seg_remapping=None, styl_seg_remapping=None):
     # Load image
     cont_img = Image.open(content_image_path).convert('RGB')
     styl_img = Image.open(style_image_path).convert('RGB')
+
+    new_cw, new_ch = memory_limit_image_resize(cont_img)
+    new_sw, new_sh = memory_limit_image_resize(styl_img)
     cont_pilimg = cont_img.copy()
     cw = cont_pilimg.width
     ch = cont_pilimg.height
-    new_cw, new_ch = resize(cont_img)
-    new_sw, new_sh = resize(styl_img)
     try:
         cont_seg = Image.open(content_seg_path)
         styl_seg = Image.open(style_seg_path)
         cont_seg.resize((new_cw,new_ch),Image.NEAREST)
         styl_seg.resize((new_sw,new_sh),Image.NEAREST)
+
     except:
         cont_seg = []
         styl_seg = []
-    
+
     cont_img = transforms.ToTensor()(cont_img).unsqueeze(0)
     styl_img = transforms.ToTensor()(styl_img).unsqueeze(0)
     
@@ -74,6 +104,10 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
     
     cont_seg = np.asarray(cont_seg)
     styl_seg = np.asarray(styl_seg)
+    if cont_seg_remapping is not None:
+        cont_seg = cont_seg_remapping.process(cont_seg)
+    if styl_seg_remapping is not None:
+        styl_seg = styl_seg_remapping.process(styl_seg)
 
     if save_intermediate:
         with Timer("Elapsed time in stylization: %f"):
