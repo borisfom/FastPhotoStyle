@@ -14,12 +14,19 @@ from cv2.ximgproc import guidedFilter
 
 
 class GIFSmoothing(nn.Module):
-  def __init__(self, r, eps):
+  def __init__(self, r, eps, USE_OPENCV=1):
     super(GIFSmoothing, self).__init__()
     self.r = r
     self.eps = eps
+    self.USE_OPENCV = USE_OPENCV
 
   def process(self, initImg, contentImg):
+    if self.USE_OPENCV == 1:
+      return self.process_opencv(initImg, contentImg)
+    else:
+      return self.process_pytorch(initImg, contentImg)
+
+  def process_opencv(self, initImg, contentImg):
     '''
     :param initImg: intermediate output. Either image path or PIL Image
     :param contentImg: content image output. Either path or PIL Image
@@ -41,33 +48,41 @@ class GIFSmoothing(nn.Module):
     output_img = Image.fromarray(output_img)
     return output_img
 
-  # def process(self, initImg, contentImg):
-  #   '''
-  #   PYTORCH GIF
-  #   :param initImg: intermediate output. Either image path or PIL Image
-  #   :param contentImg: content image output. Either path or PIL Image
-  #   :return: stylized output image. PIL Image
-  #   '''
-  #   if type(initImg) == str:
-  #     init_img = Image.open(initImg).convert('RGB')
-  #     init_img = transforms.ToTensor()(init_img).unsqueeze(0)
-  #   else:
-  #     init_img = transforms.ToTensor()(initImg).unsqueeze(0)
-  #
-  #   if type(contentImg) == str:
-  #     cont_img = Image.open(contentImg).convert('RGB')
-  #     cont_img = transforms.ToTensor()(cont_img).unsqueeze(0)
-  #   else:
-  #     cont_img = transforms.ToTensor()(contentImg).unsqueeze(0)
-  #
-  #   cont_img = cont_img.cuda()
-  #   init_img2 = init_img.cuda()
-  #   cont_img = Variable(cont_img, volatile=True)
-  #   init_img2 = Variable(init_img2, volatile=True)
-  #   output_img = GuidedFilter(r=self.r,eps=self.eps)(cont_img,init_img2)
-  #   output_img = torch.clamp(output_img,0,1)
-  #   output_img = transforms.ToPILImage()(output_img[0,:,:,:].data.cpu())
-  #   return output_img
+  def process_pytorch(self, initImg, contentImg):
+    '''
+    PYTORCH GIF
+    :param initImg: intermediate output. Either image path or PIL Image
+    :param contentImg: content image output. Either path or PIL Image
+    :return: stylized output image. PIL Image
+    '''
+    if type(initImg) == str:
+      init_img = Image.open(initImg).convert('RGB')
+      init_img = transforms.ToTensor()(init_img).unsqueeze(0)
+    else:
+      init_img = transforms.ToTensor()(initImg).unsqueeze(0)
+
+    if type(contentImg) == str:
+      cont_img = Image.open(contentImg).convert('RGB')
+      cont_img = transforms.ToTensor()(cont_img).unsqueeze(0)
+    else:
+      cont_img = transforms.ToTensor()(contentImg).unsqueeze(0)
+
+    cont_img = cont_img.cuda()
+    init_img2 = init_img.cuda()
+    cont_img = Variable(cont_img, volatile=True)
+    init_img2 = Variable(init_img2, volatile=True)
+
+    tr = self.r*2
+    pr = (tr,tr,tr,tr)
+    cont_img = torch.nn.functional.pad(cont_img,pr,'reflect')
+    init_img2 = torch.nn.functional.pad(init_img2,pr,'reflect')
+
+    output_img = GuidedFilter(r=self.r,eps=self.eps)(cont_img,init_img2)
+    output_img = torch.clamp(output_img,0,1)
+
+    output_img = output_img[:,:,tr:-tr,tr:-tr]
+    output_img = transforms.ToPILImage()(output_img[0,:,:,:].data.cpu())
+    return output_img
 
 
 #
@@ -152,4 +167,46 @@ class GuidedFilter(nn.Module):
         return mean_A * x + mean_b
 
 
+
+class FastGuidedFilter(nn.Module):
+    def __init__(self, r, eps=1e-8):
+        super(FastGuidedFilter, self).__init__()
+
+        self.r = r
+        self.eps = eps
+        self.boxfilter = BoxFilter(r)
+
+
+    def forward(self, lr_x, lr_y, hr_x):
+        n_lrx, c_lrx, h_lrx, w_lrx = lr_x.size()
+        n_lry, c_lry, h_lry, w_lry = lr_y.size()
+        n_hrx, c_hrx, h_hrx, w_hrx = hr_x.size()
+
+        assert n_lrx == n_lry and n_lry == n_hrx
+        assert c_lrx == c_hrx and (c_lrx == 1 or c_lrx == c_lry)
+        assert h_lrx == h_lry and w_lrx == w_lry
+        assert h_lrx > 2*self.r+1 and w_lrx > 2*self.r+1
+
+        ## N
+        N = self.boxfilter(Variable(lr_x.data.new().resize_((1, 1, h_lrx, w_lrx)).fill_(1.0)))
+
+        ## mean_x
+        mean_x = self.boxfilter(lr_x) / N
+        ## mean_y
+        mean_y = self.boxfilter(lr_y) / N
+        ## cov_xy
+        cov_xy = self.boxfilter(lr_x * lr_y) / N - mean_x * mean_y
+        ## var_x
+        var_x = self.boxfilter(lr_x * lr_x) / N - mean_x * mean_x
+
+        ## A
+        A = cov_xy / (var_x + self.eps)
+        ## b
+        b = mean_y - A * mean_x
+
+        ## mean_A; mean_b
+        mean_A = F.upsample(A, (h_hrx, w_hrx), mode='bilinear')
+        mean_b = F.upsample(b, (h_hrx, w_hrx), mode='bilinear')
+
+        return mean_A*hr_x+mean_b
 

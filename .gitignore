@@ -4,9 +4,13 @@ results/
 images/
 data/
 logs/
-examples*
-.idea/
+log/
+ckpt/
+vis/
+pretrained/
 notebooks/.ipynb_checkpoints/*
+.idea/
+examples*
 *.tar.gz
 *.zip
 *.pkl
