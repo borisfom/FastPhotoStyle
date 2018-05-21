@@ -7,36 +7,85 @@ import numpy as np
 from PIL import Image
 import torch
 import torch.nn as nn
-
-from models import VGGEncoder, VGGDecoder
-
+import models
 
 class PhotoWCT(nn.Module):
-    def __init__(self):
+    def __init__(self, opt):
         super(PhotoWCT, self).__init__()
+        self.opt = opt
+        self.e1 = models.VGGEncoder1()
+        self.d1 = models.VGGDecoder1()
+        self.e2 = models.VGGEncoder2()
+        self.d2 = models.VGGDecoder2()
+        self.e3 = models.VGGEncoder3()
+        self.d3 = models.VGGDecoder3()
+        self.e4 = models.VGGEncoder4()
+        # boris: This node is needed to unwrap what used to be 2 calls for the same layer
+        # (one forward() and one forward_multiple())
+        self.e4M = models.VGGEncoder4M()
+        self.d4 = models.VGGDecoder4()
         
-        self.e1 = VGGEncoder(1)
-        self.d1 = VGGDecoder(1)
-        self.e2 = VGGEncoder(2)
-        self.d2 = VGGDecoder(2)
-        self.e3 = VGGEncoder(3)
-        self.d3 = VGGDecoder(3)
-        self.e4 = VGGEncoder(4)
-        self.d4 = VGGDecoder(4)
-    
-    def transform(self, cont_img, styl_img, cont_seg, styl_seg):
-        self.__compute_label_info(cont_seg, styl_seg)
+    def load (self):
+        try:
+            pretrained_dict = torch.load(self.opt.model)
+            model_dict = self.state_dict()
 
-        sF4, sF3, sF2, sF1 = self.e4.forward_multiple(styl_img)
+            # Modify to match our changes
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+            model_dict.update(pretrained_dict)
+            print pretrained_dict.keys()
+            print model_dict.keys()
+            # need to modify saved dict due to new eM4 node I have added
+            for name, param in pretrained_dict.items():             
+                print('Checking ', name)
+                if name.startswith('e4'):
+                    mname = name.replace('e4.', 'e4M.')
+                    if mname in model_dict:
+                        print('Duplicating', name, mname)
+                        pretrained_dict[mname] = param
+
+            print('Checking keys ... ')
+            missing = set(model_dict.keys()) - set(pretrained_dict.keys())
+            if len(missing) > 0:
+                err = 'missing keys in state_dict: "{}"'.format(missing)
+                print ('Error: ',  err)
+
+            extra = set(pretrained_dict.keys()) - set(model_dict.keys())
+            if len(extra) > 0:
+                err = 'extra keys in state_dict: "{}"'.format(extra)
+                print('Error: ', err)
+                
+            print('Loading state ')
+
+            self.load_state_dict(pretrained_dict)
+            print('Loaded state ')
+            return True
+        except :
+            print("Fail to load PhotoWCT models. PhotoWCT submodule not updated?")
+            return False
         
+       
+    def forward(self, args):
+        cont_img, styl_img, cont_seg, styl_seg = args
+        self.__compute_label_info(cont_seg, styl_seg)
+        sF4, sF3, sF2, sF1 = self.e4M(styl_img)
         cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4(cont_img)
         sF4 = sF4.data.squeeze(0)
         cF4 = cF4.data.squeeze(0)
         # print(cont_seg)
         csF4 = self.__feature_wct(cF4, sF4, cont_seg, styl_seg)
         Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
-        
+
+        # boris: if you uncomment next line, it would export correctly (at least the graph would look as expected)
+        # return sF4, cF4
+
+        # boris: next line is enough to break ONNX export
+        csF4 = self.__feature_wct(cF4.data.squeeze(0), sF4.data.squeeze(0), cont_seg, styl_seg)
+        Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
+            
         cF3, cpool_idx, cpool1, cpool_idx2, cpool2 = self.e3(Im4)
+
+    
         sF3 = sF3.data.squeeze(0)
         cF3 = cF3.data.squeeze(0)
         csF3 = self.__feature_wct(cF3, sF3, cont_seg, styl_seg)
@@ -54,10 +103,13 @@ class PhotoWCT(nn.Module):
         csF1 = self.__feature_wct(cF1, sF1, cont_seg, styl_seg)
         Im1 = self.d1(csF1)
         return Im1
-    
+ 
     def __compute_label_info(self, cont_seg, styl_seg):
-        if cont_seg.size == False or styl_seg.size == False:
+        if cont_seg.size() + styl_seg.size() == 0:
             return
+        cont_seg=cont_seg.numpy()
+        styl_seg=styl_seg.numpy()
+
         max_label = np.max(cont_seg) + 1
         self.label_set = np.unique(cont_seg)
         self.label_indicator = np.zeros(max_label)
@@ -72,10 +124,11 @@ class PhotoWCT(nn.Module):
     def __feature_wct(self, cont_feat, styl_feat, cont_seg, styl_seg):
         cont_c, cont_h, cont_w = cont_feat.size(0), cont_feat.size(1), cont_feat.size(2)
         styl_c, styl_h, styl_w = styl_feat.size(0), styl_feat.size(1), styl_feat.size(2)
+        
         cont_feat_view = cont_feat.view(cont_c, -1).clone()
         styl_feat_view = styl_feat.view(styl_c, -1).clone()
         
-        if cont_seg.size == False or styl_seg.size == False:
+        if True:  #cont_seg.size == False or styl_seg.size == False:
             target_feature = self.__wct_core(cont_feat_view, styl_feat_view)
         else:
             target_feature = cont_feat.view(cont_c, -1).clone()

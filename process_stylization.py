@@ -10,8 +10,10 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 from __future__ import print_function
 import time
 import numpy as np
+import torch
 from PIL import Image
 from torch.autograd import Variable
+from torch.onnx import export
 import torchvision.transforms as transforms
 import torchvision.utils as utils
 import torch.nn as nn
@@ -71,16 +73,16 @@ def memory_limit_image_resize(cont_img):
     return cont_img.width, cont_img.height
 
 def stylization(stylization_module, smoothing_module, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
-                cuda, save_intermediate, no_post, cont_seg_remapping=None, styl_seg_remapping=None):
+                cuda, args, save_intermediate, no_post, cont_seg_remapping=None, styl_seg_remapping=None):
     # Load image
     cont_img = Image.open(content_image_path).convert('RGB')
     styl_img = Image.open(style_image_path).convert('RGB')
 
     new_cw, new_ch = memory_limit_image_resize(cont_img)
     new_sw, new_sh = memory_limit_image_resize(styl_img)
-    cont_pilimg = cont_img.copy()
-    cw = cont_pilimg.width
-    ch = cont_pilimg.height
+
+    cw = cont_img.width
+    ch = cont_img.height
     try:
         cont_seg = Image.open(content_seg_path)
         styl_seg = Image.open(style_seg_path)
@@ -93,12 +95,26 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
 
     cont_img = transforms.ToTensor()(cont_img).unsqueeze(0)
     styl_img = transforms.ToTensor()(styl_img).unsqueeze(0)
-    
+        
+    cont_img = Variable(cont_img, requires_grad=False)
+    styl_img = Variable(styl_img, requires_grad=False)
+    cont_seg = torch.FloatTensor(np.asarray(cont_seg))
+    styl_seg = torch.FloatTensor(np.asarray(styl_seg))
+    gpu = 0    
     if cuda:
-        cont_img = cont_img.cuda(0)
-        styl_img = styl_img.cuda(0)
-        stylization_module.cuda(0)
+        stylization_module.cuda(gpu)
+        cont_img = cont_img.cuda(gpu)
+        styl_img = styl_img.cuda(gpu)
+        cont_seg = cont_seg.cuda(gpu)
+        styl_seg = styl_seg.cuda(gpu)
+
+    cont_pilimg = cont_img
     
+    if args.export_onnx:
+        assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
+        export(stylization_module, [cont_img, styl_img, cont_seg, styl_seg],
+               f=args.export_onnx, verbose=args.verbose)
+        exit(0)
     cont_img = Variable(cont_img, volatile=True)
     styl_img = Variable(styl_img, volatile=True)
     
@@ -111,7 +127,7 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
 
     if save_intermediate:
         with Timer("Elapsed time in stylization: %f"):
-            stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
+            stylized_img = stylization_module.forward([cont_img, styl_img, cont_seg, styl_seg])
         if ch != new_ch or cw != new_cw:
             print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
             stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
@@ -131,19 +147,15 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         out_img.save(output_image_path)
     else:
         with Timer("Elapsed time in stylization: %f"):
-            stylized_img = stylization_module.transform(cont_img, styl_img, cont_seg, styl_seg)
+            stylized_img = stylization_module.forward([cont_img, styl_img, cont_seg, styl_seg])
         if ch != new_ch or cw != new_cw:
             print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
             stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
-        grid = utils.make_grid(stylized_img.data, nrow=1, padding=0)
-        ndarr = grid.mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy()
-        out_img = Image.fromarray(ndarr)
-
+            
         with Timer("Elapsed time in propagation: %f"):
-            out_img = smoothing_module.process(out_img, cont_pilimg)
+            out_img = smoothing_module([stylized_img, cont_img])
 
         if no_post is False:
             with Timer("Elapsed time in post processing: %f"):
                 out_img = smooth_filter(out_img, cont_pilimg, f_radius=15, f_edge=1e-1)
         out_img.save(output_image_path)
-

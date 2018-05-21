@@ -84,6 +84,9 @@ class GIFSmoothing(nn.Module):
     output_img = transforms.ToPILImage()(output_img[0,:,:,:].data.cpu())
     return output_img
 
+  def forward(self, Imgs):
+    initImg, contentImg = Imgs
+    return process(initImg, contentImg)
 
 #
 # Code below is duplicated from https://github.com/wuhuikai/DeepGuidedFilter
@@ -134,7 +137,8 @@ class GuidedFilter(nn.Module):
         self.boxfilter = BoxFilter(r)
 
 
-    def forward(self, x, y):
+    def forward(self, Imgs):
+        [x,y] = Imgs
         n_x, c_x, h_x, w_x = x.size()
         n_y, c_y, h_y, w_y = y.size()
 
