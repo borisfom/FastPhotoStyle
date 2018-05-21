@@ -105,7 +105,7 @@ class PhotoWCT(nn.Module):
         return Im1
  
     def __compute_label_info(self, cont_seg, styl_seg):
-        if cont_seg.size() + styl_seg.size() == 0:
+        if cont_seg.size + styl_seg.size == 0:
             return
         cont_seg=cont_seg.numpy()
         styl_seg=styl_seg.numpy()

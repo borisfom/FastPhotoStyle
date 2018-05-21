@@ -115,8 +115,8 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         export(stylization_module, [cont_img, styl_img, cont_seg, styl_seg],
                f=args.export_onnx, verbose=args.verbose)
         exit(0)
-    cont_img = Variable(cont_img, volatile=True)
-    styl_img = Variable(styl_img, volatile=True)
+    cont_img = Variable(cont_img, requires_grad=False)
+    styl_img = Variable(styl_img, requires_grad=False)
     
     cont_seg = np.asarray(cont_seg)
     styl_seg = np.asarray(styl_seg)

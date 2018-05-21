@@ -69,8 +69,8 @@ class GIFSmoothing(nn.Module):
 
     cont_img = cont_img.cuda()
     init_img2 = init_img.cuda()
-    cont_img = Variable(cont_img, volatile=True)
-    init_img2 = Variable(init_img2, volatile=True)
+    cont_img = Variable(cont_img, requires_grad=False)
+    init_img2 = Variable(init_img2, requires_grad=False)
 
     tr = self.r*2
     pr = (tr,tr,tr,tr)
@@ -86,7 +86,7 @@ class GIFSmoothing(nn.Module):
 
   def forward(self, Imgs):
     initImg, contentImg = Imgs
-    return process(initImg, contentImg)
+    return self.process(initImg, contentImg)
 
 #
 # Code below is duplicated from https://github.com/wuhuikai/DeepGuidedFilter
@@ -148,7 +148,8 @@ class GuidedFilter(nn.Module):
         assert h_x > 2 * self.r + 1 and w_x > 2 * self.r + 1
 
         # N
-        N = self.boxfilter(Variable(x.data.new().resize_((1, 1, h_x, w_x)).fill_(1.0)))
+        N = self.boxfilter(Variable(x.data.new().resize_((1, 1, h_x, w_x)).fill_(1.0)),
+                           requires_grad=False)
 
         # mean_x
         mean_x = self.boxfilter(x) / N
