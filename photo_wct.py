@@ -32,6 +32,7 @@ class PhotoWCT(nn.Module):
         cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4(cont_img)
         sF4 = sF4.data.squeeze(0)
         cF4 = cF4.data.squeeze(0)
+        # print(cont_seg)
         csF4 = self.__feature_wct(cF4, sF4, cont_seg, styl_seg)
         Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
         
@@ -103,9 +104,19 @@ class PhotoWCT(nn.Module):
                 
                 cFFG = torch.index_select(cont_feat_view, 1, cont_indi)
                 sFFG = torch.index_select(styl_feat_view, 1, styl_indi)
+                # print(len(cont_indi))
+                # print(len(styl_indi))
                 tmp_target_feature = self.__wct_core(cFFG, sFFG)
-                target_feature.index_copy_(1, cont_indi, tmp_target_feature)
-        
+                # print(tmp_target_feature.size())
+                if torch.__version__ >= "0.4.0":
+                    # This seems to be a bug in PyTorch 0.4.0 to me.
+                    new_target_feature = torch.transpose(target_feature, 1, 0)
+                    new_target_feature.index_copy_(0, cont_indi, \
+                            torch.transpose(tmp_target_feature,1,0))
+                    target_feature = torch.transpose(new_target_feature, 1, 0)
+                else:
+                    target_feature.index_copy_(1, cont_indi, tmp_target_feature)
+
         target_feature = target_feature.view_as(cont_feat)
         ccsF = target_feature.float().unsqueeze(0)
         return ccsF

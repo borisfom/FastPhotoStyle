@@ -146,3 +146,4 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
             with Timer("Elapsed time in post processing: %f"):
                 out_img = smooth_filter(out_img, cont_pilimg, f_radius=15, f_edge=1e-1)
         out_img.save(output_image_path)
+

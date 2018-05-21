@@ -1,3 +1,7 @@
 [submodule "PhotoWCTModels"]
 	path = PhotoWCTModels
 	url = https://github.com/suquark/PhotoWCTModels.git
+[submodule "segmentation"]
+	path = segmentation
+	url = https://github.com/mingyuliutw/semantic-segmentation-pytorch
+	branch = master
