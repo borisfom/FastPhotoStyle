@@ -80,15 +80,14 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
 
     new_cw, new_ch = memory_limit_image_resize(cont_img)
     new_sw, new_sh = memory_limit_image_resize(styl_img)
-
     cw = cont_img.width
     ch = cont_img.height
+    
     try:
         cont_seg = Image.open(content_seg_path)
         styl_seg = Image.open(style_seg_path)
         cont_seg.resize((new_cw,new_ch),Image.NEAREST)
         styl_seg.resize((new_sw,new_sh),Image.NEAREST)
-
     except:
         cont_seg = []
         styl_seg = []
@@ -98,16 +97,13 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         
     cont_img = Variable(cont_img, requires_grad=False)
     styl_img = Variable(styl_img, requires_grad=False)
-    cont_seg = torch.FloatTensor(np.asarray(cont_seg))
-    styl_seg = torch.FloatTensor(np.asarray(styl_seg))
+   
     gpu = 0    
     if cuda:
         stylization_module.cuda(gpu)
         cont_img = cont_img.cuda(gpu)
         styl_img = styl_img.cuda(gpu)
-        cont_seg = cont_seg.cuda(gpu)
-        styl_seg = styl_seg.cuda(gpu)
-
+ 
     cont_pilimg = cont_img
     
     if args.export_onnx:
@@ -125,32 +121,11 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
     if styl_seg_remapping is not None:
         styl_seg = styl_seg_remapping.process(styl_seg)
 
-    if save_intermediate:
-        with Timer("Elapsed time in stylization: %f"):
-            stylized_img = stylization_module.forward([cont_img, styl_img, cont_seg, styl_seg])
-        if ch != new_ch or cw != new_cw:
-            print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
-            stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
-        utils.save_image(stylized_img.data.cpu().float(), output_image_path, nrow=1, padding=0)
-
-        with Timer("Elapsed time in propagation: %f"):
-            out_img = smoothing_module.process(output_image_path, content_image_path)
-        out_img.save(output_image_path)
-
-        if not cuda:
-            print("NotImplemented: The CPU version of smooth filter has not been implemented currently.")
-            return
-
-        if no_post is False:
-            with Timer("Elapsed time in post processing: %f"):
-                out_img = smooth_filter(output_image_path, content_image_path, f_radius=15, f_edge=1e-1)
-        out_img.save(output_image_path)
-    else:
-        with Timer("Elapsed time in stylization: %f"):
-            stylized_img = stylization_module.forward([cont_img, styl_img, cont_seg, styl_seg])
-        if ch != new_ch or cw != new_cw:
-            print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
-            stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
+    with Timer("Elapsed time in stylization: %f"):
+        stylized_img = stylization_module.do_processing([cont_img, styl_img, cont_seg, styl_seg])
+#        if ch != new_ch or cw != new_cw:
+#            print("De-resize image: (%d,%d)->(%d,%d)" %(new_cw,new_ch,cw,ch))
+#            stylized_img = nn.functional.upsample(stylized_img, size=(ch,cw), mode='bilinear')
             
         with Timer("Elapsed time in propagation: %f"):
             out_img = smoothing_module([stylized_img, cont_img])

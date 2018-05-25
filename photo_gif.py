@@ -36,12 +36,12 @@ class GIFSmoothing(nn.Module):
       init_img = cv2.imread(initImg)
       init_img = init_img[2:-2,2:-2,:]
     else:
-      init_img = np.array(initImg)[:, :, ::-1].copy()
+      init_img = np.array(initImg)[:, :, ::-1]
 
     if type(contentImg) == str:
       cont_img = cv2.imread(contentImg)
     else:
-      cont_img = np.array(contentImg)[:, :, ::-1].copy()
+      cont_img = np.array(contentImg)[:, :, ::-1]
 
     output_img = guidedFilter(guide=cont_img, src=init_img, radius=self.r, eps=self.eps)
     output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)
