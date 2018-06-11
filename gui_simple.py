@@ -229,7 +229,7 @@ class ImageViewer(QMainWindow):
         return new_img
 
     def open_content(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath())
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath() + '/demo_images_less')
         self.content_image_source = fileName
         cont_img = cv2.imread(fileName)
         new_cont_img = self.adjust_image_size(cont_img)
@@ -240,7 +240,7 @@ class ImageViewer(QMainWindow):
         self.put_image(BASE_BLACK_IMAGE_NAME, 2 * BASE_WIDTH, 0, '', False)
 
     def open_style(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath())
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath() + '/demo_images_less')
         style_img = cv2.imread(fileName)
         new_style_img = self.adjust_image_size(style_img)
         cv2.imwrite(STYLE_IMAGE_NAME, new_style_img)
