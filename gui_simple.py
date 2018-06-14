@@ -190,6 +190,7 @@ class ImageViewer(QMainWindow):
         cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
         self.base_black_image = np.zeros((BASE_WIDTH, BASE_WIDTH), dtype=np.uint8)
         cv2.imwrite(BASE_BLACK_IMAGE_NAME, self.base_black_image)
+        self.logo = cv2.imread('nvidia_logo.jpeg')
         self.content_printer = QPrinter()
         self.style_printer = QPrinter()
         self.scaleFactor = 0.0
@@ -238,6 +239,7 @@ class ImageViewer(QMainWindow):
         cv2.imwrite(CONTENT_SEG_NAME,cont_seg)
         self.put_image(CONTENT_IMAGE_NAME, BASE_WIDTH, 0, 'Content image')
         self.put_image(BASE_BLACK_IMAGE_NAME, 2 * BASE_WIDTH, 0, '', False)
+        self.put_logo(self.buffer_image)
 
     def open_style(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath() + '/demo_images_less')
@@ -248,9 +250,11 @@ class ImageViewer(QMainWindow):
         cv2.imwrite(STYLE_SEG_NAME,style_seg)
         self.put_image(STYLE_IMAGE_NAME, 0, 0, 'Style image')
         self.put_image(BASE_BLACK_IMAGE_NAME, 2*BASE_WIDTH, 0, '', False)
+        self.put_logo(self.buffer_image)
 
     def reset(self):
         self.buffer_image = np.zeros((IMAGE_HEIGHT,IMAGE_WIDTH), dtype=np.uint8)
+        self.put_logo(self.buffer_image)
         cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
         image = QImage(BUFFER_IMAGE_NAME)
         self.imageLabel.setPixmap(QPixmap.fromImage(image))
@@ -299,12 +303,18 @@ class ImageViewer(QMainWindow):
             self.buffer_image[(nyoff+gap_y):(nyoff+gap_y+R_HEIGHT+2*BORDER),
                               (nxoff+gap_x):(nxoff+gap_x+R_WIDTH+2*BORDER), :] = display_img2
             cv2.putText(self.buffer_image, image_name, (xoff+40,yoff+60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, [0,255,0],2)
+            self.put_logo(self.buffer_image)
             cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
             image = QImage(BUFFER_IMAGE_NAME)
             self.imageLabel.setPixmap(QPixmap.fromImage(image))
             self.fitToWindowAct.setEnabled(True)
             if not self.fitToWindowAct.isChecked():
                 self.imageLabel.adjustSize()
+
+    def put_logo(self, image):
+        lh, lw, lc = self.logo.shape
+        h, w, c = image.shape
+        image[(h-lh-1):-1,(w-lw-1):-1,:] = self.logo
 
     def normalSize(self):
         self.imageLabel.adjustSize()
