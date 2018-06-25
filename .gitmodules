@@ -4,4 +4,3 @@
 [submodule "segmentation"]
 	path = segmentation
 	url = https://github.com/mingyuliutw/semantic-segmentation-pytorch
-	branch = master

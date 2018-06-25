@@ -66,6 +66,7 @@ import process_stylization_ade20k
 import process_stylization
 
 # Global variables
+BASE_BLACK_IMAGE_NAME = 'tmp_base_black_img.png'
 CONTENT_IMAGE_NAME ='tmp_content_img.png'
 STYLE_IMAGE_NAME = 'tmp_style_img.png'
 CONTENT_SEG_NAME ='tmp_content_seg.pgm'
@@ -79,7 +80,7 @@ BASE_WIDTH = 768
 SMALL_BASE_WIDTH = 712
 BORDER = 4
 IMAGE_WIDTH = BASE_WIDTH*3
-IMAGE_HEIGHT = BASE_WIDTH*2
+IMAGE_HEIGHT = BASE_WIDTH*1
 
 parser = argparse.ArgumentParser()
 # Below are from Segmentation Network
@@ -187,6 +188,9 @@ class ImageViewer(QMainWindow):
         super(ImageViewer, self).__init__()
         self.buffer_image = np.zeros((IMAGE_HEIGHT,IMAGE_WIDTH), dtype=np.uint8)
         cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
+        self.base_black_image = np.zeros((BASE_WIDTH, BASE_WIDTH), dtype=np.uint8)
+        cv2.imwrite(BASE_BLACK_IMAGE_NAME, self.base_black_image)
+        self.logo = cv2.imread('nvidia_logo.jpeg')
         self.content_printer = QPrinter()
         self.style_printer = QPrinter()
         self.scaleFactor = 0.0
@@ -200,7 +204,7 @@ class ImageViewer(QMainWindow):
         self.setCentralWidget(self.scrollArea)
         self.createActions()
         self.createMenus()
-        self.setWindowTitle("Image Viewer")
+        self.setWindowTitle("NVIDIA FastPhotoStyle Demo")
         self.resize(IMAGE_WIDTH, IMAGE_HEIGHT)
 
     def adjust_image_size(self, cont_img):
@@ -225,17 +229,8 @@ class ImageViewer(QMainWindow):
         print("Resize image: (%d,%d)->(%d,%d)" % (ow, oh, nw, nh))
         return new_img
 
-    def save(self):
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save File", QDir.currentPath())
-        stylization_img = cv2.imread(SEG_STYLIZATION_OUTPUT_NAME)
-        content_img = cv2.imread(self.content_image_source)
-        full_stylization_img = cv2.resize(stylization_img,dsize=(content_img.shape[1],content_img.shape[0]))
-        full_stylization_img = p_pro.process(full_stylization_img, content_img)
-        full_stylization_img = np.array(full_stylization_img)
-        cv2.imwrite(fileName,full_stylization_img)
-
     def open_content(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath())
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath() + '/demo_images_less')
         self.content_image_source = fileName
         cont_img = cv2.imread(fileName)
         new_cont_img = self.adjust_image_size(cont_img)
@@ -243,41 +238,33 @@ class ImageViewer(QMainWindow):
         cont_seg = segment_this_img(CONTENT_IMAGE_NAME)
         cv2.imwrite(CONTENT_SEG_NAME,cont_seg)
         self.put_image(CONTENT_IMAGE_NAME, BASE_WIDTH, 0, 'Content image')
+        self.put_image(BASE_BLACK_IMAGE_NAME, 2 * BASE_WIDTH, 0, '', False)
+        self.put_logo(self.buffer_image)
 
     def open_style(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath())
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath() + '/demo_images_less')
         style_img = cv2.imread(fileName)
         new_style_img = self.adjust_image_size(style_img)
         cv2.imwrite(STYLE_IMAGE_NAME, new_style_img)
         style_seg = segment_this_img(STYLE_IMAGE_NAME)
         cv2.imwrite(STYLE_SEG_NAME,style_seg)
         self.put_image(STYLE_IMAGE_NAME, 0, 0, 'Style image')
+        self.put_image(BASE_BLACK_IMAGE_NAME, 2*BASE_WIDTH, 0, '', False)
+        self.put_logo(self.buffer_image)
 
     def reset(self):
         self.buffer_image = np.zeros((IMAGE_HEIGHT,IMAGE_WIDTH), dtype=np.uint8)
+        self.put_logo(self.buffer_image)
         cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
         image = QImage(BUFFER_IMAGE_NAME)
         self.imageLabel.setPixmap(QPixmap.fromImage(image))
         self.scaleFactor = 1.0
         self.fitToWindowAct.setEnabled(True)
-        self.updateActions()
         if not self.fitToWindowAct.isChecked():
             self.imageLabel.adjustSize()
 
     def transfer(self):
-        process_stylization.stylization(
-            stylization_module=p_wct,
-            smoothing_module=p_pro,
-            content_image_path=CONTENT_IMAGE_NAME,
-            style_image_path=STYLE_IMAGE_NAME,
-            content_seg_path='',
-            style_seg_path='',
-            output_image_path=STYLIZATION_OUTPUT_NAME,
-            cuda=True,
-            save_intermediate=args.save_intermediate,
-            no_post=args.no_post
-        )
-        cont_seg, styl_seg = process_stylization_ade20k.stylization(
+        process_stylization_ade20k.stylization(
             stylization_module=p_wct,
             smoothing_module=p_pro,
             content_image_path=CONTENT_IMAGE_NAME,
@@ -290,17 +277,9 @@ class ImageViewer(QMainWindow):
             no_post=args.no_post,
             label_remapping=segReMapping
         )
+        self.put_image(SEG_STYLIZATION_OUTPUT_NAME, 2*BASE_WIDTH, 0, 'Stylization Result')
 
-        cont_seg_vis = overlay(cv2.imread(CONTENT_IMAGE_NAME),cont_seg)
-        styl_seg_vis = overlay(cv2.imread(STYLE_IMAGE_NAME), styl_seg)
-        cv2.imwrite(VIS_CONTENT_SEG_NAME, cont_seg_vis)
-        cv2.imwrite(VIS_STYLE_SEG_NAME, styl_seg_vis)
-        self.put_image(STYLIZATION_OUTPUT_NAME, 2*BASE_WIDTH, 0, 'Stylization without mask')
-        self.put_image(VIS_CONTENT_SEG_NAME, BASE_WIDTH, BASE_WIDTH, 'Content segmentation')
-        self.put_image(VIS_STYLE_SEG_NAME, 0, BASE_WIDTH, 'Style segmentation')
-        self.put_image(SEG_STYLIZATION_OUTPUT_NAME, 2*BASE_WIDTH, BASE_WIDTH, 'Stylization with mask')
-
-    def put_image(self, fileName, xoff, yoff, image_name):
+    def put_image(self, fileName, xoff, yoff, image_name, boarder=True):
         if fileName:
             self.content_image_name = fileName
             self.content_image = cv2.imread(self.content_image_name)
@@ -313,42 +292,44 @@ class ImageViewer(QMainWindow):
             gap_x = int((BASE_WIDTH - R_WIDTH) / 2)
             gap_y = int((BASE_WIDTH - R_HEIGHT) / 2)
             display_img = cv2.resize(self.content_image, dsize=(R_WIDTH, R_HEIGHT))
-            display_img2 = cv2.copyMakeBorder(
-                display_img,BORDER,BORDER,BORDER,BORDER,cv2.BORDER_CONSTANT,value=[255,255,255])
-            print(display_img2.shape)
+            if boarder:
+                display_img2 = cv2.copyMakeBorder(display_img,BORDER,BORDER,BORDER,BORDER,cv2.BORDER_CONSTANT,value=[255,255,255])
+            else:
+                display_img2 = cv2.resize(display_img, dsize=(display_img.shape[1]+2*BORDER, display_img.shape[0]+2*BORDER))
             self.buffer_image = cv2.imread(BUFFER_IMAGE_NAME)
             self.buffer_image[yoff:(yoff+BASE_WIDTH),xoff:(xoff+BASE_WIDTH),:] = 0
             nyoff = yoff-BORDER
             nxoff = xoff-BORDER
             self.buffer_image[(nyoff+gap_y):(nyoff+gap_y+R_HEIGHT+2*BORDER),
                               (nxoff+gap_x):(nxoff+gap_x+R_WIDTH+2*BORDER), :] = display_img2
-            cv2.putText(self.buffer_image, image_name, (xoff+40,yoff+60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, [255,0,255],2)
+            cv2.putText(self.buffer_image, image_name, (xoff+40,yoff+60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, [0,255,0],2)
+            self.put_logo(self.buffer_image)
             cv2.imwrite(BUFFER_IMAGE_NAME, self.buffer_image)
             image = QImage(BUFFER_IMAGE_NAME)
             self.imageLabel.setPixmap(QPixmap.fromImage(image))
-            self.scaleFactor = 1.0
             self.fitToWindowAct.setEnabled(True)
-            self.updateActions()
             if not self.fitToWindowAct.isChecked():
                 self.imageLabel.adjustSize()
 
+    def put_logo(self, image):
+        lh, lw, lc = self.logo.shape
+        h, w, c = image.shape
+        image[(h-lh-1):-1,(w-lw-1):-1,:] = self.logo
+
     def normalSize(self):
         self.imageLabel.adjustSize()
-        self.scaleFactor = 1.0
 
     def fitToWindowAct(self):
         fitToWindowAct = self.fitToWindowAct.isChecked()
         self.scrollArea.setWidgetResizable(fitToWindowAct)
         if not fitToWindowAct:
             self.normalSize()
-        self.updateActions()
 
     def createActions(self):
         self.contentOpenAct = QAction("&Open", self, triggered=self.open_content)
         self.styleOpenAct = QAction("&Open", self, triggered=self.open_style)
         self.transferAct = QAction("&Transfer", self, triggered=self.transfer)
         self.resetAct = QAction("&Reset", self, triggered=self.reset)
-        self.saveAct = QAction("&Save", self, triggered=self.save)
         self.fitToWindowAct = QAction("&Fit to Window", self, enabled=False, checkable=True, shortcut="Ctrl+F", triggered=self.fitToWindowAct)
 
 
@@ -361,25 +342,14 @@ class ImageViewer(QMainWindow):
         self.transferMenu.addAction(self.transferAct)
         self.resetMenu = QMenu("&Reset", self)
         self.resetMenu.addAction(self.resetAct)
-        self.saveMenu = QMenu("&Save", self)
-        self.saveMenu.addAction(self.saveAct)
         self.menuBar().addMenu(self.styleMenu)
         self.menuBar().addMenu(self.contentMenu)
         self.menuBar().addMenu(self.transferMenu)
         self.menuBar().addMenu(self.resetMenu)
-        self.menuBar().addMenu(self.saveMenu)
-
-    def updateActions(self):
-        pass
-
-
-    def scaleImage(self, factor):
-        pass
 
 
     def adjustScrollBar(self, scrollBar, factor):
-        scrollBar.setValue(int(factor * scrollBar.value()
-                                + ((factor - 1) * scrollBar.pageStep()/2)))
+        scrollBar.setValue(int(factor * scrollBar.value() + ((factor - 1) * scrollBar.pageStep()/2)))
 
 
 
