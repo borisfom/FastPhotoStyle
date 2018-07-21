@@ -43,6 +43,8 @@ class GIFSmoothing(nn.Module):
     else:
       cont_img = np.array(contentImg)[:, :, ::-1]
 
+    print ( init_img.shape)
+    print ( cont_img.shape)
     output_img = guidedFilter(guide=cont_img, src=init_img, radius=self.r, eps=self.eps)
     output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)
     output_img = Image.fromarray(output_img)
@@ -85,8 +87,9 @@ class GIFSmoothing(nn.Module):
     return output_img
 
   def forward(self, Imgs):
-    initImg, contentImg = Imgs
-    return self.process(initImg, contentImg)
+    with torch.no_grad():
+      initImg, contentImg = Imgs
+      return self.process(initImg, contentImg)
 
 #
 # Code below is duplicated from https://github.com/wuhuikai/DeepGuidedFilter

@@ -72,7 +72,7 @@ def memory_limit_image_resize(cont_img):
     print("Resize image: (%d,%d)->(%d,%d)" % (orig_width, orig_height, cont_img.width, cont_img.height))
     return cont_img.width, cont_img.height
 
-def stylization(stylization_module, smoothing_module, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
+def stylization(stylization_module, segmentation_module, smoothing_module, content_image_path, style_image_path, content_seg_path, style_seg_path, output_image_path,
                 cuda, args, save_intermediate, no_post, cont_seg_remapping=None, styl_seg_remapping=None):
     # Load image
     cont_img = Image.open(content_image_path).convert('RGB')
@@ -105,14 +105,16 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
         styl_img = styl_img.cuda(gpu)
  
     cont_pilimg = cont_img
-    
-    if args.export_onnx:
-        assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
-        export(stylization_module, [cont_img, styl_img, cont_seg, styl_seg],
-               f=args.export_onnx, verbose=args.verbose)
-        exit(0)
+
     cont_img = Variable(cont_img, requires_grad=False)
     styl_img = Variable(styl_img, requires_grad=False)
+
+    if args.export_onnx:
+        assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
+        torch.onnx._export(segmentation_module, cont_img, f='segm-'+args.export_onnx, verbose=args.verbose)
+        torch.onnx._export(stylization_module, [cont_img, styl_img, cont_seg, styl_seg],
+               f=args.export_onnx, verbose=args.verbose)
+        exit(0)
     
     cont_seg = np.asarray(cont_seg)
     styl_seg = np.asarray(styl_seg)
@@ -134,3 +136,4 @@ def stylization(stylization_module, smoothing_module, content_image_path, style_
             with Timer("Elapsed time in post processing: %f"):
                 out_img = smooth_filter(out_img, cont_pilimg, f_radius=15, f_edge=1e-1)
         out_img.save(output_image_path)
+        

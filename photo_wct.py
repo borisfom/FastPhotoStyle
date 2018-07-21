@@ -109,10 +109,6 @@ class PhotoWCT(nn.Module):
 
         csF4 = self.__feature_wct(cF4, sF4, self.cont_indi4, self.styl_indi4)
         Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
-
-        # boris: if you uncomment next line, it would export correctly (at least the graph would look as expected)
-
-        # boris: next line is enough to break ONNX export
             
         cF3, cpool_idx, cpool1, cpool_idx2, cpool2 = self.e3(Im4)
     
