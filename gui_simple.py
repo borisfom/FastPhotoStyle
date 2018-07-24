@@ -131,15 +131,44 @@ builder = ModelBuilder()
 net_encoder = builder.build_encoder(arch=args.arch_encoder, fc_dim=args.fc_dim, weights=args.weights_encoder)
 net_decoder = builder.build_decoder(arch=args.arch_decoder, fc_dim=args.fc_dim, num_class=args.num_class, weights=args.weights_decoder, use_softmax=True)
 crit = nn.NLLLoss(ignore_index=-1)
-segmentation_module = SegmentationModule(net_encoder, net_decoder, crit, opt)
+segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
 segmentation_module.cuda()
 segmentation_module.eval()
-if opt.export_onnx:
-    assert opt.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
-    export(segmentation_module, [cont_img, styl_img, cont_seg, styl_seg], f='segm-'+args.export_onnx, verbose=args.verbose)
-
 transform = transforms.Compose([transforms.Normalize(mean=[102.9801, 115.9465, 122.7717], std=[1., 1., 1.])])
 
+
+def segment_this_img(f):
+    img = imread(f, mode='RGB')
+    img = img[:, :, ::-1]  # BGR to RGB!!!
+    ori_height, ori_width, _ = img.shape
+    img_resized_list = []
+    for this_short_size in args.imgSize:
+        scale = this_short_size / float(min(ori_height, ori_width))
+        target_height, target_width = int(ori_height * scale), int(ori_width * scale)
+        target_height = round2nearest_multiple(target_height, args.padding_constant)
+        target_width = round2nearest_multiple(target_width, args.padding_constant)
+        img_resized = cv2.resize(img.copy(), (target_width, target_height))
+        img_resized = img_resized.astype(np.float32)
+        img_resized = img_resized.transpose((2, 0, 1))
+        img_resized = transform(torch.from_numpy(img_resized))
+        img_resized = torch.unsqueeze(img_resized, 0)
+        img_resized_list.append(img_resized)
+    input = dict()
+    input['img_ori'] = img.copy()
+    input['img_data'] = [x.contiguous() for x in img_resized_list]
+    segSize = (img.shape[0],img.shape[1])
+    with torch.no_grad():
+        pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
+        for timg in img_resized_list:
+            feed_dict = dict()
+            feed_dict['img_data'] = timg.cuda()
+            feed_dict = async_copy_to(feed_dict, args.gpu_id)
+            # forward pass
+            pred_tmp = segmentation_module(feed_dict, segSize=segSize)
+            pred = pred + pred_tmp.cpu() / len(args.imgSize)
+        _, preds = torch.max(pred, dim=1)
+        preds = as_numpy(preds.squeeze(0))
+    return preds
 
 
 def overlay(img, pred_color, blend_factor=0.4):
@@ -304,7 +333,6 @@ class ImageViewer(QMainWindow):
         self.resetAct = QAction("&Reset", self, triggered=self.reset)
         self.fitToWindowAct = QAction("&Fit to Window", self, enabled=False, checkable=True, shortcut="Ctrl+F", triggered=self.fitToWindowAct)
 
-
     def createMenus(self):
         self.contentMenu = QMenu("&Content", self)
         self.contentMenu.addAction(self.contentOpenAct)
@@ -319,10 +347,8 @@ class ImageViewer(QMainWindow):
         self.menuBar().addMenu(self.transferMenu)
         self.menuBar().addMenu(self.resetMenu)
 
-
     def adjustScrollBar(self, scrollBar, factor):
         scrollBar.setValue(int(factor * scrollBar.value() + ((factor - 1) * scrollBar.pageStep()/2)))
-
 
 
 app = QApplication(sys.argv)
