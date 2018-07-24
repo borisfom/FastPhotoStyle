@@ -136,6 +136,7 @@ segmentation_module.cuda()
 segmentation_module.eval()
 transform = transforms.Compose([transforms.Normalize(mean=[102.9801, 115.9465, 122.7717], std=[1., 1., 1.])])
 
+
 def segment_this_img(f):
     img = imread(f, mode='RGB')
     img = img[:, :, ::-1]  # BGR to RGB!!!
@@ -332,7 +333,6 @@ class ImageViewer(QMainWindow):
         self.resetAct = QAction("&Reset", self, triggered=self.reset)
         self.fitToWindowAct = QAction("&Fit to Window", self, enabled=False, checkable=True, shortcut="Ctrl+F", triggered=self.fitToWindowAct)
 
-
     def createMenus(self):
         self.contentMenu = QMenu("&Content", self)
         self.contentMenu.addAction(self.contentOpenAct)
@@ -347,10 +347,8 @@ class ImageViewer(QMainWindow):
         self.menuBar().addMenu(self.transferMenu)
         self.menuBar().addMenu(self.resetMenu)
 
-
     def adjustScrollBar(self, scrollBar, factor):
         scrollBar.setValue(int(factor * scrollBar.value() + ((factor - 1) * scrollBar.pageStep()/2)))
-
 
 
 app = QApplication(sys.argv)
