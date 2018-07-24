@@ -375,7 +375,7 @@ def smooth_local_affine(output_, input_, epsilon, patch, h, w, f_r, f_e):
 def smooth_filter(initImg, contentImg, f_radius=15,f_edge=1e-1):
 #  input_ = np.ascontiguousarray(contentImg)
 #  print (np.shape(input_))
-  print initImg.size(), contentImg.size()
+#  print initImg.size(), contentImg.size()
   N,C, H, W = initImg.size()
   best_ = smooth_local_affine(initImg, contentImg, 1e-7, 3, H, W, f_radius, f_edge)
   img = Image.fromarray(np.uint8(np.clip(np.asarray(best_) * 255., 0, 255.)))

@@ -109,13 +109,6 @@ def stylization(stylization_module, segmentation_module, smoothing_module, conte
     cont_img = Variable(cont_img, requires_grad=False)
     styl_img = Variable(styl_img, requires_grad=False)
 
-    if args.export_onnx:
-        assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
-        torch.onnx._export(segmentation_module, cont_img, f='segm-'+args.export_onnx, verbose=args.verbose)
-        torch.onnx._export(stylization_module, [cont_img, styl_img, cont_seg, styl_seg],
-               f=args.export_onnx, verbose=args.verbose)
-        exit(0)
-    
     cont_seg = np.asarray(cont_seg)
     styl_seg = np.asarray(styl_seg)
     if cont_seg_remapping is not None:

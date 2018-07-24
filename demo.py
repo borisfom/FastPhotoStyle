@@ -8,8 +8,10 @@ import argparse
 import os
 import torch
 import sys
-import process_stylization
 import onnx
+import cv2
+import numpy as np
+from torch.autograd import Variable
 
 sys.path.append('./stylization')
 from scipy.misc import imread, imresize
@@ -22,7 +24,6 @@ from lib.utils import as_numpy, mark_volatile
 from photo_wct import PhotoWCT
 from photo_gif import GIFSmoothing
 import process_stylization_ade20k
-import process_stylization
 
 # Global variables
 BASE_BLACK_IMAGE_NAME = 'tmp_base_black_img.png'
@@ -83,7 +84,67 @@ parser.add_argument("--engine", type=str, help="run serialized TRT engine")
 parser.add_argument("--onnx", type=str, help="run ONNX model via TRT")
 parser.add_argument('--verbose', action='store_true', default = False, help='toggles verbose')
 parser.add_argument("-d", "--data_type", default=32, type=int, choices=[8, 16, 32], help="Supported data type i.e. 8, 16, 32 bit")
+
+
+def adjust_image_size(cont_img):
+        MINSIZE = 240
+        MAXSIZE = 960
+        ow = cont_img.shape[1]
+        oh = cont_img.shape[0]
+        if max(ow, oh) <= MINSIZE:
+            if ow > oh:
+                new_img = cv2.resize(cont_img, dsize=(int(ow * 1.0 / oh * MINSIZE), MINSIZE))
+            else:
+                new_img = cv2.resize(cont_img, dsize=(MINSIZE, int(oh * 1.0 / ow * MINSIZE)))
+        elif min(ow, oh) >= MAXSIZE:
+            if ow > oh:
+                new_img = cv2.resize(cont_img, dsize=(MAXSIZE, int(oh * 1.0 / ow * MAXSIZE)))
+            else:
+                new_img = cv2.resize(cont_img, dsize=(int(ow * 1.0 / oh * MAXSIZE), MAXSIZE))
+        else:
+            new_img =  cont_img
+        nw = new_img.shape[1]
+        nh = new_img.shape[0]
+        print("Resize image: (%d,%d)->(%d,%d)" % (ow, oh, nw, nh))
+        return new_img
+
     
+def segment_this_img(f):
+    img = imread(f, mode='RGB')
+    img = img[:, :, ::-1]  # BGR to RGB!!!
+    ori_height, ori_width, _ = img.shape
+    img_resized_list = []
+    for this_short_size in args.imgSize:
+        scale = this_short_size / float(min(ori_height, ori_width))
+        target_height, target_width = int(ori_height * scale), int(ori_width * scale)
+        target_height = round2nearest_multiple(target_height, args.padding_constant)
+        target_width = round2nearest_multiple(target_width, args.padding_constant)
+        img_resized = cv2.resize(img.copy(), (target_width, target_height))
+        img_resized = img_resized.astype(np.float32)
+        img_resized = img_resized.transpose((2, 0, 1))
+        img_resized = transform(torch.from_numpy(img_resized))
+        img_resized = torch.unsqueeze(img_resized, 0)
+        img_resized_list.append(img_resized)
+    input = dict()
+    input['img_ori'] = img.copy()
+    input['img_data'] = [x.contiguous() for x in img_resized_list]
+    segSize = (img.shape[0],img.shape[1])
+    print(segSize)
+    with torch.no_grad():
+        pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
+        for timg in img_resized_list:
+ #           feed_dict = dict()
+ #           feed_dict['img_data'] = timg.cuda()
+ #           feed_dict = async_copy_to(feed_dict, args.gpu_id)
+            # forward pass
+            pred_tmp = segmentation_module(timg.cuda())
+            print (pred_tmp.shape)
+            pred_tmp = pred_tmp.cpu()/ len(args.imgSize)
+            pred = pred + pred_tmp
+            print (pred_tmp.shape)
+        _, preds = torch.max(pred, dim=1)
+        preds = as_numpy(preds.squeeze(0))
+    return preds
     
 args = parser.parse_args()
 
@@ -113,39 +174,21 @@ segmentation_module.cuda()
 segmentation_module.eval()
 transform = transforms.Compose([transforms.Normalize(mean=[102.9801, 115.9465, 122.7717], std=[1., 1., 1.])])
 
-def segment_this_img(f):
-    img = imread(f, mode='RGB')
-    img = img[:, :, ::-1]  # BGR to RGB!!!
-    ori_height, ori_width, _ = img.shape
-    img_resized_list = []
-    for this_short_size in args.imgSize:
-        scale = this_short_size / float(min(ori_height, ori_width))
-        target_height, target_width = int(ori_height * scale), int(ori_width * scale)
-        target_height = round2nearest_multiple(target_height, args.padding_constant)
-        target_width = round2nearest_multiple(target_width, args.padding_constant)
-        img_resized = cv2.resize(img.copy(), (target_width, target_height))
-        img_resized = img_resized.astype(np.float32)
-        img_resized = img_resized.transpose((2, 0, 1))
-        img_resized = transform(torch.from_numpy(img_resized))
-        img_resized = torch.unsqueeze(img_resized, 0)
-        img_resized_list.append(img_resized)
-    input = dict()
-    input['img_ori'] = img.copy()
-    input['img_data'] = [x.contiguous() for x in img_resized_list]
-    segSize = (img.shape[0],img.shape[1])
-    with torch.no_grad():
-        pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
-        for timg in img_resized_list:
-            feed_dict = dict()
-            feed_dict['img_data'] = timg.cuda()
-            feed_dict = async_copy_to(feed_dict, args.gpu_id)
-            # forward pass
-            pred_tmp = segmentation_module(feed_dict, segSize=segSize)
-            pred = pred + pred_tmp.cpu() / len(args.imgSize)
-        _, preds = torch.max(pred, dim=1)
-        preds = as_numpy(preds.squeeze(0))
-    return preds
+style_img = cv2.imread(args.style_image_path)
+new_style_img = adjust_image_size(style_img)
+if args.export_onnx:
+    assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
+    torch.onnx._export(segmentation_module, Variable(transforms.ToTensor()(new_style_img).unsqueeze(0).cuda(0), requires_grad=False), f='segm-'+args.export_onnx, verbose=args.verbose)
+cv2.imwrite(STYLE_IMAGE_NAME, new_style_img)
+style_seg = segment_this_img(STYLE_IMAGE_NAME)
+cv2.imwrite(STYLE_SEG_NAME,style_seg)
 
+
+cont_img = cv2.imread(args.content_image_path)
+new_cont_img = adjust_image_size(cont_img)
+cv2.imwrite(CONTENT_IMAGE_NAME, new_cont_img)    
+cont_seg = segment_this_img(CONTENT_IMAGE_NAME)
+cv2.imwrite(CONTENT_SEG_NAME,cont_seg)
 
 if not p_wct.load():
     exit(1)
@@ -154,15 +197,22 @@ p_pro = GIFSmoothing(r=35, eps=0.001)
 
 if args.cuda:
     p_wct.cuda(0)
+        
+if args.export_onnx:
+    assert args.export_onnx.endswith(".onnx"), "Export model file should end with .onnx"
+
+    torch.onnx._export(stylization_module, [new_cont_img, new_style_img, cont_seg, style_seg],
+                       f=args.export_onnx, verbose=args.verbose)
+    exit(0)
     
-process_stylization.stylization(
+process_stylization_ade20k.stylization(
     stylization_module=p_wct,
     segmentation_module=segmentation_module,
     smoothing_module=p_pro,
-    content_image_path=args.content_image_path,
-    style_image_path=args.style_image_path,
-    content_seg_path=args.content_seg_path,
-    style_seg_path=args.style_seg_path,
+    content_image_path=CONTENT_IMAGE_NAME,
+    style_image_path=STYLE_IMAGE_NAME,
+    content_seg_path=CONTENT_SEG_NAME,
+    style_seg_path=STYLE_SEG_NAME,
     output_image_path=args.output_image_path,
     cuda=args.cuda,
     save_intermediate=args.save_intermediate,
