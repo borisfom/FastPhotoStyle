@@ -47,6 +47,12 @@ parser.add_argument('--fast', action='store_true', default=False)
 parser.add_argument('--no_post', action='store_true', default=False)
 parser.add_argument('--cuda', type=int, default=1, help='Enable CUDA.')
 parser.add_argument('--label_mapping', type=str, default='segmentation/semantic_rel.npy')
+parser.add_argument("--export_onnx", type=str, help="export ONNX model to a given file")
+parser.add_argument("--engine", type=str, help="run serialized TRT engine")
+parser.add_argument("--onnx", type=str, help="run ONNX model via TRT")
+parser.add_argument('--verbose', action='store_true', default = False, help='toggles verbose')
+parser.add_argument("-d", "--data_type", default=32, type=int, choices=[8, 16, 32], help="Supported data type i.e. 8, 16, 32 bit")
+
 args = parser.parse_args()
 
 
@@ -65,15 +71,15 @@ builder = ModelBuilder()
 net_encoder = builder.build_encoder(arch=args.arch_encoder, fc_dim=args.fc_dim, weights=args.weights_encoder)
 net_decoder = builder.build_decoder(arch=args.arch_decoder, fc_dim=args.fc_dim, num_class=args.num_class, weights=args.weights_decoder, use_softmax=True)
 crit = nn.NLLLoss(ignore_index=-1)
-segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
+segmentation_module = SegmentationModule(net_encoder, net_decoder, crit, args)
 segmentation_module.cuda()
 segmentation_module.eval()
 transform = transforms.Compose([transforms.Normalize(mean=[102.9801, 115.9465, 122.7717], std=[1., 1., 1.])])
 
 # Load FastPhotoStyle model
-p_wct = PhotoWCT()
+p_wct = PhotoWCT(args)
 try:
-    p_wct.load_state_dict(torch.load(args.model))
+    p_wct.load()
 except:
     print("Fail to load PhotoWCT models. PhotoWCT submodule not updated?")
     exit()
@@ -108,11 +114,8 @@ def segment_this_img(f):
     with torch.no_grad():
         pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
         for timg in img_resized_list:
-            feed_dict = dict()
-            feed_dict['img_data'] = timg.cuda()
-            feed_dict = async_copy_to(feed_dict, args.gpu_id)
             # forward pass
-            pred_tmp = segmentation_module(feed_dict, segSize=segSize)
+            pred_tmp = segmentation_module(timg.cuda()) # , segSize=segSize)
             pred = pred + pred_tmp.cpu() / len(args.imgSize)
         _, preds = torch.max(pred, dim=1)
         preds = as_numpy(preds.squeeze(0))
