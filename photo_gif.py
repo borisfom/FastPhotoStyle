@@ -36,12 +36,12 @@ class GIFSmoothing(nn.Module):
       init_img = cv2.imread(initImg)
       init_img = init_img[2:-2,2:-2,:]
     else:
-      init_img = np.array(initImg)[:, :, ::-1]
+      init_img = np.array(initImg)[:, :, ::-1].copy()
 
     if type(contentImg) == str:
       cont_img = cv2.imread(contentImg)
     else:
-      cont_img = np.array(contentImg)[:, :, ::-1]
+      cont_img = np.array(contentImg)[:, :, ::-1].copy()
 
     print ( init_img.shape)
     print ( cont_img.shape)

@@ -88,7 +88,7 @@ parser.add_argument("-d", "--data_type", default=32, type=int, choices=[8, 16, 3
 
 def adjust_image_size(cont_img):
         MINSIZE = 240
-        MAXSIZE = 960
+        MAXSIZE = 1920
         ow = cont_img.shape[1]
         oh = cont_img.shape[0]
         if max(ow, oh) <= MINSIZE:
@@ -133,15 +133,14 @@ def segment_this_img(f):
     with torch.no_grad():
         pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
         for timg in img_resized_list:
- #           feed_dict = dict()
- #           feed_dict['img_data'] = timg.cuda()
- #           feed_dict = async_copy_to(feed_dict, args.gpu_id)
             # forward pass
             pred_tmp = segmentation_module(timg.cuda())
             print (pred_tmp.shape)
             pred_tmp = pred_tmp.cpu()/ len(args.imgSize)
-            pred = pred + pred_tmp
             print (pred_tmp.shape)
+            
+            pred = pred + pred_tmp
+            
         _, preds = torch.max(pred, dim=1)
         preds = as_numpy(preds.squeeze(0))
     return preds
@@ -151,9 +150,6 @@ args = parser.parse_args()
 # Load model
 p_wct = PhotoWCT(args)
 
-# Load model
-p_wct.load()
-
 p_pro = GIFSmoothing(r=35, eps=0.01)
 segReMapping = process_stylization_ade20k.SegReMapping(args.label_mapping)
 
@@ -161,8 +157,8 @@ segReMapping = process_stylization_ade20k.SegReMapping(args.label_mapping)
 SEG_NET_PATH = 'segmentation'
 args.weights_encoder = os.path.join(SEG_NET_PATH,args.model_path, 'encoder' + args.suffix)
 args.weights_decoder = os.path.join(SEG_NET_PATH,args.model_path, 'decoder' + args.suffix)
-args.arch_encoder = 'resnet50_dilated8'
-args.arch_decoder = 'ppm_bilinear_deepsup'
+args.arch_encoder = 'resnet50'
+# args.arch_decoder = 'ppm_bilinear_deepsup'
 args.fc_dim = 2048
 # Network Builders
 builder = ModelBuilder()
@@ -207,7 +203,6 @@ if args.export_onnx:
     
 process_stylization_ade20k.stylization(
     stylization_module=p_wct,
-    segmentation_module=segmentation_module,
     smoothing_module=p_pro,
     content_image_path=CONTENT_IMAGE_NAME,
     style_image_path=STYLE_IMAGE_NAME,
@@ -217,5 +212,4 @@ process_stylization_ade20k.stylization(
     cuda=args.cuda,
     save_intermediate=args.save_intermediate,
     no_post=args.no_post,
-    args=args
 )

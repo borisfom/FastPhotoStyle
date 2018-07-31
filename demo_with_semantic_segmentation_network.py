@@ -30,7 +30,7 @@ parser.add_argument('--fc_dim', default=2048, type=int, help='number of features
 parser.add_argument('--num_val', default=-1, type=int, help='number of images to evalutate')
 parser.add_argument('--num_class', default=150, type=int, help='number of classes')
 parser.add_argument('--batch_size', default=1, type=int, help='batchsize. current only supports 1')
-parser.add_argument('--imgSize', default=[300, 400, 500, 600], nargs='+', type=int, help='list of input image sizes.' 'for multiscale testing, e.g. 300 400 500')
+parser.add_argument('--imgSize', default=[], nargs='+', type=int, help='list of input image sizes.' 'for multiscale testing, e.g. 300 400 500')
 parser.add_argument('--imgMaxSize', default=1000, type=int, help='maximum input image size of long edge')
 parser.add_argument('--padding_constant', default=8, type=int, help='maxmimum downsampling rate of the network')
 parser.add_argument('--segm_downsampling_rate', default=8, type=int, help='downsampling rate of the segmentation label')
@@ -47,7 +47,7 @@ parser.add_argument('--fast', action='store_true', default=False)
 parser.add_argument('--no_post', action='store_true', default=False)
 parser.add_argument('--cuda', type=int, default=1, help='Enable CUDA.')
 parser.add_argument('--label_mapping', type=str, default='segmentation/semantic_rel.npy')
-parser.add_argument("--export_onnx", type=str, help="export ONNX model to a given file")
+parser.add_argument("--export_onnx", type=str, default = '', help="export ONNX model to a given file")
 parser.add_argument("--engine", type=str, help="run serialized TRT engine")
 parser.add_argument("--onnx", type=str, help="run ONNX model via TRT")
 parser.add_argument('--verbose', action='store_true', default = False, help='toggles verbose')
@@ -62,8 +62,8 @@ segReMapping = process_stylization_ade20k.SegReMapping(args.label_mapping)
 SEG_NET_PATH = 'segmentation'
 args.weights_encoder = os.path.join(SEG_NET_PATH,args.model_path, 'encoder' + args.suffix)
 args.weights_decoder = os.path.join(SEG_NET_PATH,args.model_path, 'decoder' + args.suffix)
-args.arch_encoder = 'resnet50_dilated8'
-args.arch_decoder = 'ppm_bilinear_deepsup'
+# args.arch_encoder = 'resnet50_dilated8'
+# args.arch_decoder = 'ppm_bilinear_deepsup'
 args.fc_dim = 2048
 
 # Load semantic segmentation network module
@@ -78,6 +78,37 @@ transform = transforms.Compose([transforms.Normalize(mean=[102.9801, 115.9465, 1
 
 # Load FastPhotoStyle model
 p_wct = PhotoWCT(args)
+
+def segment_this_img(f, exp = None):
+    img = imread(f, mode='RGB')
+    img = img[:, :, ::-1]  # BGR to RGB!!!
+    ori_height, ori_width, _ = img.shape
+    img_resized_list = []
+    if True: # for this_short_size in args.imgSize:
+        scale = 1 # this_short_size / float(min(ori_height, ori_width))
+        target_height, target_width = int(ori_height * scale), int(ori_width * scale)
+        target_height = round2nearest_multiple(target_height, args.padding_constant)
+        target_width = round2nearest_multiple(target_width, args.padding_constant)
+        img_resized = cv2.resize(img.copy(), (target_width, target_height))
+        img_resized = img_resized.astype(np.float32)
+        img_resized = img_resized.transpose((2, 0, 1))
+        img_resized = transform(torch.from_numpy(img_resized))
+        img_resized = torch.unsqueeze(img_resized, 0).cuda()
+
+    segSize = (img.shape[0],img.shape[1])
+    with torch.no_grad():
+            if exp:
+                assert exp.endswith(".onnx"), "Export model file should end with .onnx"
+                torch.onnx._export(segmentation_module, img_resized, f='segm-' + exp, verbose=args.verbose)
+                torch.onnx._export(p_wct, [img_resized,img_resized], f=exp, verbose=args.verbose)
+            pred = segmentation_module(img_resized)
+            pred = nn.functional.upsample(pred, size=segSize, mode='bilinear', align_corners=False)
+            print (pred.shape)
+            _, preds = torch.max(pred, dim=1)
+            return as_numpy(preds.squeeze(0))
+
+
+    
 try:
     p_wct.load()
 except:
@@ -90,43 +121,12 @@ else:
 if args.cuda:
     p_wct.cuda(0)
 
-
-def segment_this_img(f):
-    img = imread(f, mode='RGB')
-    img = img[:, :, ::-1]  # BGR to RGB!!!
-    ori_height, ori_width, _ = img.shape
-    img_resized_list = []
-    for this_short_size in args.imgSize:
-        scale = this_short_size / float(min(ori_height, ori_width))
-        target_height, target_width = int(ori_height * scale), int(ori_width * scale)
-        target_height = round2nearest_multiple(target_height, args.padding_constant)
-        target_width = round2nearest_multiple(target_width, args.padding_constant)
-        img_resized = cv2.resize(img.copy(), (target_width, target_height))
-        img_resized = img_resized.astype(np.float32)
-        img_resized = img_resized.transpose((2, 0, 1))
-        img_resized = transform(torch.from_numpy(img_resized))
-        img_resized = torch.unsqueeze(img_resized, 0)
-        img_resized_list.append(img_resized)
-    input = dict()
-    input['img_ori'] = img.copy()
-    input['img_data'] = [x.contiguous() for x in img_resized_list]
-    segSize = (img.shape[0],img.shape[1])
-    with torch.no_grad():
-        pred = torch.zeros(1, args.num_class, segSize[0], segSize[1])
-        for timg in img_resized_list:
-            # forward pass
-            pred_tmp = segmentation_module(timg.cuda()) # , segSize=segSize)
-            pred = pred + pred_tmp.cpu() / len(args.imgSize)
-        _, preds = torch.max(pred, dim=1)
-        preds = as_numpy(preds.squeeze(0))
-    return preds
-
-
-with torch.no_grad():
-    cont_seg = segment_this_img(args.content_image_path)
+    cont_seg = segment_this_img(args.content_image_path, args.export_onnx)
     cv2.imwrite(args.content_seg_path, cont_seg)
+    
     style_seg = segment_this_img(args.style_image_path)
     cv2.imwrite(args.style_seg_path, style_seg)
+    
     process_stylization_ade20k.stylization(
         stylization_module=p_wct,
         smoothing_module=p_pro,

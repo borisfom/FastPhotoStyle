@@ -33,8 +33,9 @@ class PhotoWCT(nn.Module):
             # Modify to match our changes
             pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
             model_dict.update(pretrained_dict)
-#            print pretrained_dict.keys()
-#            print model_dict.keys()
+#            print (pretrained_dict.keys())
+#            print (model_dict.keys())
+            extra_dict = dict()
             # need to modify saved dict due to new eM4 node I have added
             for name, param in pretrained_dict.items():             
 #                print('Checking ', name)
@@ -42,26 +43,28 @@ class PhotoWCT(nn.Module):
                     mname = name.replace('e4.', 'e4M.')
                     if mname in model_dict:
                         print('Duplicating', name, mname)
-                        pretrained_dict[mname] = param
-
+                        extra_dict[mname] = param
+            pretrained_dict.update(extra_dict)
             print('Checking keys ... ')
             missing = set(model_dict.keys()) - set(pretrained_dict.keys())
             if len(missing) > 0:
                 err = 'missing keys in state_dict: "{}"'.format(missing)
                 print ('Error: ',  err)
-
+                return False
+            
             extra = set(pretrained_dict.keys()) - set(model_dict.keys())
             if len(extra) > 0:
                 err = 'extra keys in state_dict: "{}"'.format(extra)
                 print('Error: ', err)
+                return False
                 
             print('Loading state ')
 
             self.load_state_dict(pretrained_dict)
             print('Loaded state ')
             return True
-        except :
-            print("Fail to load PhotoWCT models. PhotoWCT submodule not updated?")
+        except Exception as e :
+            print("Fail to load PhotoWCT models:", e)
             return False
 
     def pre_processing(self, cont_img, styl_img, cont_seg, styl_seg):
@@ -95,8 +98,7 @@ class PhotoWCT(nn.Module):
         self.cont_indi2, self.styl_indi2 = self.__compute_mask(cont_seg, styl_seg, cont_w2, cont_h2, styl_w2, styl_h2)
         self.cont_indi1, self.styl_indi1 = self.__compute_mask(cont_seg, styl_seg, cont_w1, cont_h1, styl_w1, styl_h1)
 
-    def do_processing(self, args):
-        cont_img, styl_img, cont_seg, styl_seg = args
+    def transform(self, cont_img, styl_img, cont_seg, styl_seg):
         self.pre_processing(cont_img, styl_img, cont_seg, styl_seg)
         return self.forward([cont_img, styl_img])
         
@@ -201,6 +203,7 @@ class PhotoWCT(nn.Module):
         
         iden = torch.eye(cFSize[0])  # .double()
         if self.is_cuda:
+            print (iden.size())
             iden = iden.cuda()
         
         contentConv = torch.mm(cont_feat, cont_feat.t()).div(cFSize[1] - 1) + iden
